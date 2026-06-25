@@ -2984,8 +2984,8 @@ scatter <- function(res, xlab, fname, title) {
 
 specs <- list(
   list(col="anti_hbc_prevalence", lab="Anti-HBc IgG seroprevalence (%)", f="FigR_D_pub_vs_antiHBc",  t="Research output vs cumulative HBV exposure (anti-HBc) by department", name="Publications ~ anti-HBc IgG (%)"),
-  list(col="hbsag_prevalence",    lab="HBsAg seroprevalence (%)",        f="FigR_E_pub_vs_HBsAg",   t="Research output vs current HBsAg prevalence by department",          name="Publications ~ HBsAg (%)"),
-  list(col="incidence",           lab="HBV incidence",                   f="FigR_F_pub_vs_incidence", t="Research output vs HBV incidence by department",                     name="Publications ~ incidence")
+  list(col="hbsag_prevalence",    lab="HBsAg seroprevalence (%)",        f="FigR_E_pub_vs_HBsAg",   t="Research output vs current HBsAg prevalence by department",          name="Publications ~ HBsAg (%)")
+  # list(col="incidence",           lab="HBV incidence",                   f="FigR_F_pub_vs_incidence", t="Research output vs HBV incidence by department",                     name="Publications ~ incidence")
 )
 
 cat("\n==================  OUTPUT ~ BURDEN ALIGNMENT  ==================\n")
@@ -3114,3 +3114,96 @@ cat("\n", strrep("=",78), "\n  HBV MASTER PIPELINE COMPLETE\n", sep="")
 cat(sprintf("  Runtime: %.1f min · figures: outputs/figures/ (PNG 600dpi + PDF)\n",
             as.numeric(difftime(.MASTER_END,.MASTER_START,units="mins"))))
 cat(strrep("=",78), "\n", sep="")
+# ==============================================================================
+# >>> SECTION 15B · SCRIPT DEFINITIVO: GRÁFICO DE SPEARMAN - FORMATO MDPI (PATHOGENS)
+# ==============================================================================
+# Este bloque es completamente independiente. No afectará el desarrollo ni 
+# las variables del resto de las gráficas del análisis bibliométrico.
+
+# 1. Instalar y cargar librerías necesarias (por redundancia y seguridad)
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(ggrepel)) install.packages("ggrepel")
+if(!require(here)) install.packages("here")
+
+library(ggplot2)
+library(ggpubr)
+library(ggrepel)
+library(here)
+
+# 2. Leer los datos desde el archivo CSV (Práctica Q1 para GitHub)
+# Asume que el archivo CSV fue guardado en la carpeta 'data' del proyecto.
+ruta_csv_spearman <- here::here("data", "database_datos_spearman.csv")
+
+if(file.exists(ruta_csv_spearman)) {
+  
+  datos_spearman <- read.table(ruta_csv_spearman, header = TRUE, sep = ";", dec = ".", stringsAsFactors = FALSE)
+  
+  # Forzar formato numérico por seguridad para evitar errores de lectura
+  datos_spearman$Incidencia <- as.numeric(datos_spearman$Incidencia)
+  datos_spearman$Publicaciones <- as.numeric(datos_spearman$Publicaciones)
+  
+  # 3. Calcular las medianas para las líneas de corte (cuadrantes)
+  mediana_pub <- median(datos_spearman$Publicaciones, na.rm = TRUE)
+  mediana_inc <- median(datos_spearman$Incidencia, na.rm = TRUE)
+  
+  # 4. Construcción del gráfico con estándares de MDPI (Textos en inglés)
+  grafico_final_mdpi <- ggplot(datos_spearman, aes(x = Publicaciones, y = Incidencia)) +
+    
+    # Líneas de corte de la mediana (Punteadas) para formar los cuadrantes
+    geom_vline(xintercept = mediana_pub, linetype = "dotted", color = "black", linewidth = 0.5) +
+    geom_hline(yintercept = mediana_inc, linetype = "dotted", color = "black", linewidth = 0.5) +
+    
+    # Puntos de los departamentos
+    geom_point(color = "#2c7bb6", size = 2.5, alpha = 0.8) +
+    
+    # Curva de tendencia suavizada (LOESS)
+    geom_smooth(method = "loess", color = "#b30000", fill = NA, linewidth = 0.8, linetype = "dashed") +
+    
+    # Etiquetas de texto forzadas (Los departamentos se mantienen en español)
+    geom_text_repel(aes(label = Departamento), 
+                    size = 3, 
+                    force = 40, 
+                    max.overlaps = Inf, 
+                    segment.color = "grey60", 
+                    box.padding = 0.3) +
+    
+    # Estadística en inglés insertada con annotate (inmune al STRIP_TITLES)
+    annotate("text", x = 50, y = 6.5, 
+             label = "Spearman correlation:\nrho = 0.19, p = 0.399", 
+             hjust = 0, size = 3.5, fontface = "italic") +
+    
+    # Títulos de los ejes en inglés
+    labs(x = "Number of publications (by study setting)",
+         y = "HBV incidence rate (per 10,000 inhabitants)") +
+    
+    # Escalas exactas de los ejes
+    scale_x_continuous(breaks = seq(0, 90, 10), limits = c(0, 95)) +
+    scale_y_continuous(breaks = seq(0, 8, 1), limits = c(-0.2, 7.5)) +
+    
+    # Tema clásico exigido para revistas indexadas Q1/Q2
+    theme_classic() +
+    theme(axis.title = element_text(face = "bold", size = 12),
+          axis.text = element_text(size = 10))
+  
+  # 5. Mostrar el gráfico en la ventana "Plots" de RStudio
+  print(grafico_final_mdpi)
+  
+  # 6. Exportar el gráfico en Alta Resolución directamente a la carpeta de figuras
+  # AQUÍ SE CORRIGIERON LOS NOMBRES DE LOS ARCHIVOS
+  ruta_salida_png  <- here::here("outputs", "figures", "main", "Figure_6_spearman.png")
+  ruta_salida_pdf  <- here::here("outputs", "figures", "main", "Figure_6_spearman.pdf")
+  
+  # Guardar en PNG (Alta resolución para revisiones rápidas)
+  ggsave(ruta_salida_png, plot = grafico_final_mdpi, device = "png", dpi = 600, width = 10, height = 6, bg = "white")
+  
+  # Guardar en PDF (Formato Vectorial)
+  ggsave(ruta_salida_pdf, plot = grafico_final_mdpi, device = cairo_pdf, width = 10, height = 6, bg = "white")
+  
+  message("\n[SECTION 15B] ÉXITO: Gráfico de Spearman exportado correctamente como 'Figure_6_spearman' en PNG y PDF en la ruta: outputs/figures/main/\n")
+  
+} else {
+  warning("\n[SECTION 15B ERROR] No se encontró el archivo en: ", ruta_csv_spearman, 
+          "\nPor favor, guarda tu Excel como CSV en la carpeta 'data' antes de correr el script.\n")
+}
+# ==============================================================================
